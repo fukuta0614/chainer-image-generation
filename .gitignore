@@ -1,0 +1,7 @@
+*.pyc
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+runs/*
+!runs/.gitkeep
