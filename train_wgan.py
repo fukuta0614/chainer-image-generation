@@ -14,6 +14,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import wgan
 from dataset import CelebA
 
+try:
+    import tensorflow as tf
+    use_tensorboard = True
+except:
+    print('tensorflow is not installed')
+    use_tensorboard = False
+
 
 def progress_report(count, start_time, batchsize, emd):
     duration = time.time() - start_time
@@ -44,7 +51,7 @@ def visualize(gen, epoch, savedir, batch_size=64):
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU device ID')
-    parser.add_argument('--epoch', '-e', type=int, default=1200, help='# of epoch')
+    parser.add_argument('--epoch', '-e', type=int, default=100, help='# of epoch')
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
@@ -67,6 +74,18 @@ def main():
         for k, v in args._get_kwargs():
             print('{} = {}'.format(k, v))
             f.write('{} = {}\n'.format(k, v))
+
+    # tensorboard
+    if use_tensorboard:
+        sess = tf.Session()
+        sess.run(tf.initialize_all_variables())
+
+        summary_dir = os.path.join(out_dir, "summaries")
+
+        loss_ = tf.placeholder(tf.float32)
+        gen_loss_summary = tf.scalar_summary('total_loss', loss_)
+        dis_loss_summary = tf.scalar_summary('style_loss', loss_)
+        summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
     # load celebA
     dataset = CelebA()
@@ -103,7 +122,7 @@ def main():
         while i < len(dataset) // args.batch_size:
 
             # tips for critic reach optimality
-            if gen_iterations < 25 or gen_iterations % 500 == 0:
+            if gen_iterations < 10 or gen_iterations % 500 == 0:
                 d_iters = 100
             else:
                 d_iters = args.d_iters
@@ -124,7 +143,7 @@ def main():
                 y_fake = dis(x_fake)
 
                 L_dis = - (y_real - y_fake)
-                print(j, -L_dis.data)
+                # print(j, -L_dis.data)
                 dis.cleargrads()
                 L_dis.backward()
                 optimizer_dis.update()
@@ -160,6 +179,12 @@ def main():
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:
             f.write(log + '\n')
+
+        if use_tensorboard:
+            summary = sess.run(gen_loss_summary, feed_dict={loss_: np.mean(sum_L_gen)})
+            summary_writer.add_summary(summary, epoch)
+            summary = sess.run(dis_loss_summary, feed_dict={loss_: np.mean(sum_L_dis)})
+            summary_writer.add_summary(summary, epoch)
 
         if epoch % 5 == 0:
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)
