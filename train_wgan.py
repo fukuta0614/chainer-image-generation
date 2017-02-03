@@ -7,6 +7,8 @@ import chainer
 from chainer import cuda
 from chainer import serializers
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,7 +28,7 @@ def progress_report(count, start_time, batchsize, emd):
     duration = time.time() - start_time
     throughput = count * batchsize / duration
     sys.stderr.write(
-        '\r{} updates ({} samples) time: {} ({:.2f} samples/sec) {}'.format(
+        '\r{} updates ({} samples) time: {} ({:.2f} samples/sec) emd : {:.5f}'.format(
             count, count * batchsize, str(datetime.timedelta(seconds=duration)).split('.')[0], throughput, emd
         )
     )
@@ -44,7 +46,7 @@ def visualize(gen, epoch, savedir, batch_size=64):
         ax = fig.add_subplot(8, 8, i + 1, xticks=[], yticks=[])
         ax.imshow(img_gen[i].transpose(1, 2, 0))
     fig.savefig('{}/generate_{:03d}'.format(savedir, epoch))
-    # fig.show()
+    # plt.show()
     plt.close()
 
 
@@ -56,7 +58,9 @@ def main():
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
     parser.add_argument('--d_iters', type=int, default=5)
+    parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--d_clip', type=float, default=0.01)
+    parser.add_argument('--resume', default='')
     parser.add_argument('--out', default='')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
@@ -83,8 +87,8 @@ def main():
         summary_dir = os.path.join(out_dir, "summaries")
 
         loss_ = tf.placeholder(tf.float32)
-        gen_loss_summary = tf.scalar_summary('total_loss', loss_)
-        dis_loss_summary = tf.scalar_summary('style_loss', loss_)
+        gen_loss_summary = tf.scalar_summary('gen_loss', loss_)
+        dis_loss_summary = tf.scalar_summary('dis_loss', loss_)
         summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
     # load celebA
@@ -105,8 +109,8 @@ def main():
     optimizer_gen.setup(gen)
     optimizer_dis.setup(dis)
 
-    optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
-    optimizer_dis.add_hook(chainer.optimizer.WeightDecay(0.00001))
+    # optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
+    # optimizer_dis.add_hook(chainer.optimizer.WeightDecay(0.00001))
 
     # start training
     start = time.time()
@@ -122,7 +126,7 @@ def main():
         while i < len(dataset) // args.batch_size:
 
             # tips for critic reach optimality
-            if gen_iterations < 10 or gen_iterations % 500 == 0:
+            if gen_iterations < args.initial_iter or gen_iterations % 500 == 0:
                 d_iters = 100
             else:
                 d_iters = args.d_iters
@@ -172,10 +176,7 @@ def main():
 
             progress_report(epoch * len(dataset) + i, start, args.batch_size, emd)
 
-        print()
-        log = ' gen loss={}, dis loss={}'.format(np.mean(sum_L_gen), np.mean(sum_L_dis))
-        print(log)
-
+        log = 'gen loss={:.5f}, dis loss={:.5f}'.format(np.mean(sum_L_gen), np.mean(sum_L_dis))
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:
             f.write(log + '\n')
