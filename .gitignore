@@ -6,6 +6,8 @@
 generate.py
 train_vaewgan.py
 
+.DS_Store
+
 # User-specific stuff:
 .idea/
 
