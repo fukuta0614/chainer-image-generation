@@ -84,8 +84,8 @@ class Discriminator(chainer.Chain):
         h2 = F.leaky_relu(add_noise(self.bn2_0(self.c2_0(h), test=not train), test=not train))
         h = F.leaky_relu(add_noise(self.bn2_1(self.c2_1(h2), test=not train), test=not train))
         h3 = F.leaky_relu(add_noise(self.bn3_0(self.c3_0(h), test=not train), test=not train))
-        h = F.sum(self.l4(h3)) / h3.size
-        return h, h2, h3
+        h = self.l4(h3)
+        return F.sum(h) / h.size, h2, h3
 
 
 class Encoder(chainer.Chain):

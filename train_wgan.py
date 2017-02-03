@@ -96,7 +96,7 @@ def main():
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
     gen = wgan.Generator(n_hidden=args.g_hidden)
-    dis = wgan.Discriminator()
+    dis = wgan.Discriminator2(ch=256)
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
@@ -109,7 +109,7 @@ def main():
     optimizer_gen.setup(gen)
     optimizer_dis.setup(dis)
 
-    # optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
+    optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
     # optimizer_dis.add_hook(chainer.optimizer.WeightDecay(0.00001))
 
     # start training
@@ -174,7 +174,7 @@ def main():
             sum_L_dis.append(emd)
             sum_L_gen.append(float(L_gen.data))
 
-            progress_report(epoch * len(dataset) + i, start, args.batch_size, emd)
+            progress_report(epoch * len(dataset) // args.batch_size + i, start, args.batch_size, emd)
 
         log = 'gen loss={:.5f}, dis loss={:.5f}'.format(np.mean(sum_L_gen), np.mean(sum_L_dis))
         print('\n' + log)
