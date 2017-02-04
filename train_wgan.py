@@ -58,10 +58,13 @@ def main():
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
-    parser.add_argument('--last_channel_size', type=int, default=512)
+    parser.add_argument('--g_arch', type=int, default=1)
+    parser.add_argument('--g_channel', type=int, default=512)
+    parser.add_argument('--d_arch', type=int, default=1)
     parser.add_argument('--d_iters', type=int, default=5)
-    parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--d_clip', type=float, default=0.01)
+    parser.add_argument('--d_channel', type=int, default=512)
+    parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--resume', default='')
     parser.add_argument('--out', default='')
     # args = parser.parse_args()
@@ -93,11 +96,22 @@ def main():
         summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
     # load celebA
-    dataset = CelebA()
+    dataset = CelebA(image_type=args.g_arch)
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
-    gen = wgan.Generator(n_hidden=args.g_hidden, ch=args.last_channel_size)
-    dis = wgan.Discriminator(ch=args.last_channel_size)
+    if args.g_arch == 1:
+        gen = wgan.Generator(n_hidden=args.g_hidden, ch=args.g_channel)
+    elif args.g_arch == 2:
+        gen = wgan.Generator2(n_hidden=args.g_hidden, ch=args.g_channel)
+    else:
+        raise ValueError('invalid arch')
+
+    if args.g_arch == 1:
+        dis = wgan.Discriminator(ch=args.d_channel)
+    elif args.g_arch == 2:
+        dis = wgan.Discriminator2(ch=args.d_channel)
+    else:
+        raise ValueError('invalid arch')
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
