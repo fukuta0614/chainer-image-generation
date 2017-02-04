@@ -58,7 +58,7 @@ def main():
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
-    parser.add_argument('--d_channel', type=int, default=512)
+    parser.add_argument('--last_channel_size', type=int, default=512)
     parser.add_argument('--d_iters', type=int, default=5)
     parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--d_clip', type=float, default=0.01)
@@ -96,8 +96,8 @@ def main():
     dataset = CelebA()
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
-    gen = wgan.Generator(n_hidden=args.g_hidden)
-    dis = wgan.Discriminator2(ch=args.d_channel)
+    gen = wgan.Generator(n_hidden=args.g_hidden, ch=args.last_channel_size)
+    dis = wgan.Discriminator(ch=args.last_channel_size)
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
@@ -148,7 +148,6 @@ def main():
                 y_fake = dis(x_fake)
 
                 L_dis = - (y_real - y_fake)
-                print(j, -L_dis.data)
                 dis.cleargrads()
                 L_dis.backward()
                 optimizer_dis.update()
