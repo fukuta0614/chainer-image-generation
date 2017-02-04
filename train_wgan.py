@@ -38,7 +38,8 @@ def visualize(gen, epoch, savedir, batch_size=64):
 
     z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
-    img_gen = ((cuda.to_cpu(x_fake.data)) * 255).clip(0, 255).astype(np.uint8)
+    # img_gen = ((cuda.to_cpu(x_fake.data)) * 255).astype(np.uint8)
+    img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(12, 12))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
@@ -57,6 +58,7 @@ def main():
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
+    parser.add_argument('--d_channel', type=int, default=512)
     parser.add_argument('--d_iters', type=int, default=5)
     parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--d_clip', type=float, default=0.01)
@@ -85,7 +87,6 @@ def main():
         sess.run(tf.initialize_all_variables())
 
         summary_dir = os.path.join(out_dir, "summaries")
-
         loss_ = tf.placeholder(tf.float32)
         gen_loss_summary = tf.scalar_summary('gen_loss', loss_)
         dis_loss_summary = tf.scalar_summary('dis_loss', loss_)
@@ -96,7 +97,7 @@ def main():
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
     gen = wgan.Generator(n_hidden=args.g_hidden)
-    dis = wgan.Discriminator2(ch=256)
+    dis = wgan.Discriminator2(ch=args.d_channel)
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
@@ -109,12 +110,11 @@ def main():
     optimizer_gen.setup(gen)
     optimizer_dis.setup(dis)
 
-    optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
+    # optimizer_gen.add_hook(chainer.optimizer.WeightDecay(0.00001))
     # optimizer_dis.add_hook(chainer.optimizer.WeightDecay(0.00001))
 
     # start training
     start = time.time()
-    train_count = 0
     gen_iterations = 0
     for epoch in range(args.epoch):
 
@@ -144,10 +144,11 @@ def main():
 
                 y_real = dis(x)
                 x_fake = gen(z)
+                x_fake.unchain_backward()
                 y_fake = dis(x_fake)
 
                 L_dis = - (y_real - y_fake)
-                # print(j, -L_dis.data)
+                print(j, -L_dis.data)
                 dis.cleargrads()
                 L_dis.backward()
                 optimizer_dis.update()
@@ -171,21 +172,22 @@ def main():
             gen_iterations += 1
 
             emd = float(-L_dis.data)
+            l_gen = float(L_gen.data)
             sum_L_dis.append(emd)
-            sum_L_gen.append(float(L_gen.data))
+            sum_L_gen.append(l_gen)
 
             progress_report(epoch * len(dataset) // args.batch_size + i, start, args.batch_size, emd)
+
+            if use_tensorboard:
+                summary = sess.run(gen_loss_summary, feed_dict={loss_: l_gen})
+                summary_writer.add_summary(summary, gen_iterations)
+                summary = sess.run(dis_loss_summary, feed_dict={loss_: emd})
+                summary_writer.add_summary(summary, gen_iterations)
 
         log = 'gen loss={:.5f}, dis loss={:.5f}'.format(np.mean(sum_L_gen), np.mean(sum_L_dis))
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:
             f.write(log + '\n')
-
-        if use_tensorboard:
-            summary = sess.run(gen_loss_summary, feed_dict={loss_: np.mean(sum_L_gen)})
-            summary_writer.add_summary(summary, epoch)
-            summary = sess.run(dis_loss_summary, feed_dict={loss_: np.mean(sum_L_dis)})
-            summary_writer.add_summary(summary, epoch)
 
         if epoch % 5 == 0:
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)

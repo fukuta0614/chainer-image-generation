@@ -46,9 +46,9 @@ class CelebA(chainer.dataset.DatasetMixin):
             crop((offset_x, offset_y, offset_x + w, offset_y + h)).
             resize((self.image_size, self.image_size)))
 
-        image = image.astype(np.float32).transpose((2, 0, 1)).reshape((3, self.image_size, self.image_size))
+        image = image.astype(np.float32).transpose((2, 0, 1))
 
         # pre-process
-        image /= 255
+        image /= 127.5 - 1
 
         return image, attr

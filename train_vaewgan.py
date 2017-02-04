@@ -39,7 +39,8 @@ def visualize(gen, epoch, savedir, batch_size=64):
 
     z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
-    img_gen = ((cuda.to_cpu(x_fake.data)) * 255).clip(0, 255).astype(np.uint8)
+    # img_gen = ((cuda.to_cpu(x_fake.data)) * 255).astype(np.uint8)
+    img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(12, 12))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
@@ -100,7 +101,6 @@ def main():
     gen = wgan.Generator(n_hidden=args.g_hidden)
     dis = wgan.Discriminator()
     enc = wgan.Encoder()
-
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
@@ -214,29 +214,32 @@ def main():
 
             gen_iterations += 1
 
-            emd = float(-L_dis.data)
-            sum_L_dis.append(emd)
-            sum_L_gen.append(float(L_gen.data))
-            sum_L_enc.append(float(L_enc.data))
-            sum_L_rec.append(float(L_rec.data))
+            l_dis = float(-L_dis.data)
+            l_gen = float(L_gen.data)
+            l_enc = float(L_enc.data)
+            l_rec = float(L_rec.data)
+            sum_L_dis.append(l_dis)
+            sum_L_gen.append(l_gen)
+            sum_L_enc.append(l_enc)
+            sum_L_rec.append(l_rec)
 
-            progress_report(epoch * len(dataset) + i, start, args.batch_size, emd)
+            progress_report(epoch * len(dataset) + i, start, args.batch_size, l_dis)
+
+            if use_tensorboard:
+                summary = sess.run(gen_loss_summary, feed_dict={loss_: l_gen})
+                summary_writer.add_summary(summary, gen_iterations)
+                summary = sess.run(dis_loss_summary, feed_dict={loss_: l_dis})
+                summary_writer.add_summary(summary, gen_iterations)
+                summary = sess.run(enc_loss_summary, feed_dict={loss_: l_enc})
+                summary_writer.add_summary(summary, gen_iterations)
+                summary = sess.run(rec_loss_summary, feed_dict={loss_: l_rec})
+                summary_writer.add_summary(summary, gen_iterations)
 
         log = 'gen loss={:.5f}, dis loss={:.5f} enc loss={:.5f} rec loss={:.5f}'\
             .format(np.mean(sum_L_gen), np.mean(sum_L_dis), np.mean(sum_L_enc), np.mean(sum_L_rec))
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:
             f.write(log + '\n')
-
-        if use_tensorboard:
-            summary = sess.run(gen_loss_summary, feed_dict={loss_: np.mean(sum_L_gen)})
-            summary_writer.add_summary(summary, epoch)
-            summary = sess.run(dis_loss_summary, feed_dict={loss_: np.mean(sum_L_dis)})
-            summary_writer.add_summary(summary, epoch)
-            summary = sess.run(enc_loss_summary, feed_dict={loss_: np.mean(sum_L_enc)})
-            summary_writer.add_summary(summary, epoch)
-            summary = sess.run(rec_loss_summary, feed_dict={loss_: np.mean(sum_L_rec)})
-            summary_writer.add_summary(summary, epoch)
 
         if epoch % 5 == 0:
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)
