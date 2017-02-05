@@ -44,6 +44,9 @@ class Generator(chainer.Chain):
     def make_hidden(self, batchsize):
         return numpy.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)).astype(numpy.float32)
 
+    def make_hidden_normal(self, batchsize):
+        return numpy.random.normal(0, 1, (batchsize, self.n_hidden, 1, 1)).astype(numpy.float32)
+
     # noinspection PyCallingNonCallable,PyUnresolvedReferences
     def __call__(self, z, train=True):
         h = F.reshape(F.relu(self.bn0(self.l0(z), test=not train)),

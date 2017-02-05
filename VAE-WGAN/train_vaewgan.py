@@ -9,6 +9,7 @@ from chainer import serializers
 import chainer.functions as F
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
@@ -18,6 +19,7 @@ from dataset import CelebA
 
 try:
     import tensorflow as tf
+
     use_tensorboard = True
 except:
     print('tensorflow is not installed')
@@ -32,10 +34,39 @@ def progress_report(count, start_time, batchsize, emd):
             count, count * batchsize, str(datetime.timedelta(seconds=duration)).split('.')[0], throughput, emd
         )
     )
+    sys.stdout.flush()
 
 
-def visualize(gen, epoch, savedir, batch_size=64, image_type='sigmoid'):
-    z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
+def visualize(gen, enc, train_iter, epoch, savedir, batch_size=64, image_type='sigmoid'):
+    # save original image
+    batch = train_iter.next()
+    x = chainer.Variable(gen.xp.asarray([b[0] for b in batch[:batch_size // 2]], 'float32'), volatile=True)
+    if image_type == 'sigmoid':
+        img_origin = ((cuda.to_cpu(x.data)) * 255).clip(0, 255).astype(np.uint8)
+    else:
+        img_origin = ((cuda.to_cpu(x.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+
+    # save reconstruction image
+    mu, var = enc(x, train=False)
+    # z = F.gaussian(mu, var)
+    x_rec = gen(mu, train=False)
+    if image_type == 'sigmoid':
+        img_rec = ((cuda.to_cpu(x_rec.data)) * 255).clip(0, 255).astype(np.uint8)
+    else:
+        img_rec = ((cuda.to_cpu(x_rec.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    fig = plt.figure(figsize=(9, 9))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
+    for m in range(32):
+        i = m / 8
+        j = m % 8
+        ax = fig.add_subplot(8, 8, 16 * i + j + 1, xticks=[], yticks=[])
+        ax.imshow(img_origin[m].transpose(1, 2, 0))
+        ax = fig.add_subplot(8, 8, 16 * i + j + 8 + 1, xticks=[], yticks=[])
+        ax.imshow(img_rec[m].transpose(1, 2, 0))
+    plt.savefig('{}/reconstruction_{:03d}'.format(savedir, epoch))
+    plt.close()
+
+    z = chainer.Variable(gen.xp.asarray(gen.make_hidden_normal(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
     if image_type == 'sigmoid':
         img_gen = ((cuda.to_cpu(x_fake.data)) * 255).clip(0, 255).astype(np.uint8)
@@ -62,6 +93,7 @@ def main():
     parser.add_argument('--g_arch', type=int, default=1)
     parser.add_argument('--g_activate', type=str, default='sigmoid')
     parser.add_argument('--g_channel', type=int, default=512)
+    parser.add_argument('--C', type=float, default=1)
     parser.add_argument('--d_arch', type=int, default=1)
     parser.add_argument('--d_iters', type=int, default=5)
     parser.add_argument('--d_clip', type=float, default=0.01)
@@ -158,7 +190,7 @@ def main():
                 y_real, _, _ = dis(x)
 
                 # fake image from random noize
-                z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32), volatile=True)
+                z = chainer.Variable(gen.xp.asarray(gen.make_hidden_normal(args.batch_size)), volatile=True)
                 x_fake = gen(z)
                 x_fake.volatile = False
                 y_fake, _, _ = dis(x_fake)
@@ -188,7 +220,7 @@ def main():
             ###########################
             batch = train_iter.next()
             x = chainer.Variable(gen.xp.asarray([b[0] for b in batch], 'float32'))
-            z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32))
+            z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batch_size, args.g_hidden)).astype(np.float32))
 
             # real image
             y_real, l2_real, l3_real = dis(x)
@@ -207,7 +239,7 @@ def main():
             L_prior = F.gaussian_kl_divergence(mu_z, ln_var_z) / args.batch_size
             L_gan = - 0.5 * y_fake - 0.5 * y_rec
 
-            L_gen = L_gan + L_rec
+            L_gen = L_gan + args.C * L_rec
             L_enc = L_rec + L_prior
 
             gen.cleargrads()
@@ -241,7 +273,7 @@ def main():
                 summary = sess.run(rec_loss_summary, feed_dict={loss_: l_rec})
                 summary_writer.add_summary(summary, gen_iterations)
 
-        log = 'gen loss={:.5f}, dis loss={:.5f} enc loss={:.5f} rec loss={:.5f}'\
+        log = 'gen loss={:.5f}, dis loss={:.5f} enc loss={:.5f} rec loss={:.5f}' \
             .format(np.mean(sum_L_gen), np.mean(sum_L_dis), np.mean(sum_L_enc), np.mean(sum_L_rec))
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:
@@ -252,7 +284,8 @@ def main():
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.gen.model".format(epoch)), gen)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.enc.model".format(epoch)), enc)
 
-        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'))
+        visualize(gen, enc, train_iter, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'),
+                  image_type=args.g_activate)
 
 
 if __name__ == '__main__':
