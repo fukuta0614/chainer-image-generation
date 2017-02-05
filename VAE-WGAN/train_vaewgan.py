@@ -9,7 +9,6 @@ from chainer import serializers
 import chainer.functions as F
 
 import matplotlib
-
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
@@ -19,7 +18,6 @@ from dataset import CelebA
 
 try:
     import tensorflow as tf
-
     use_tensorboard = True
 except:
     print('tensorflow is not installed')
@@ -273,7 +271,7 @@ def main():
                 summary = sess.run(rec_loss_summary, feed_dict={loss_: l_rec})
                 summary_writer.add_summary(summary, gen_iterations)
 
-        log = 'gen loss={:.5f}, dis loss={:.5f} enc loss={:.5f} rec loss={:.5f}' \
+        log = 'gen loss={:.5f} dis loss={:.5f} enc loss={:.5f} rec loss={:.5f}' \
             .format(np.mean(sum_L_gen), np.mean(sum_L_dis), np.mean(sum_L_enc), np.mean(sum_L_rec))
         print('\n' + log)
         with open(os.path.join(out_dir, "log"), 'a+') as f:

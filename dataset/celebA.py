@@ -49,7 +49,7 @@ class CelebA(chainer.dataset.DatasetMixin):
 
         # pre-process
         if self.image_type == 'tanh':
-            image /= 127.5 - 1
+            image = image / 127.5 - 1
         elif self.image_type == 'sigmoid':
             image /= 255.
         else:
