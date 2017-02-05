@@ -56,7 +56,7 @@ def visualize(gen, epoch, savedir, batch_size=64, image_type='sigmoid'):
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU device ID')
-    parser.add_argument('--epoch', '-e', type=int, default=100, help='# of epoch')
+    parser.add_argument('--epoch', '-e', type=int, default=300, help='# of epoch')
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
@@ -212,7 +212,7 @@ def main():
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.gen.model".format(epoch)), gen)
 
-        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'), image_type=args.image_type)
+        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'), image_type=args.activate)
 
 
 if __name__ == '__main__':

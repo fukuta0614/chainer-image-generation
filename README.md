@@ -1,6 +1,11 @@
 # image generation using chainer
 
-WIP
+- [VAE-GAN](https://arxiv.org/abs/1512.09300)
+- [Wasserstein GAN](https://arxiv.org/abs/1701.07875)
 
-- Variational auto encoder + DCGAN
-- Wasserstein GAN
+# Requirements
+
+- Chainer &ge; 1.5
+
+
+
