@@ -34,12 +34,14 @@ def progress_report(count, start_time, batchsize, emd):
     )
 
 
-def visualize(gen, epoch, savedir, batch_size=64):
+def visualize(gen, epoch, savedir, batch_size=64, image_type='sigmoid'):
 
     z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
-    # img_gen = ((cuda.to_cpu(x_fake.data)) * 255).astype(np.uint8)
-    img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    if image_type == 'sigmoid':
+        img_gen = ((cuda.to_cpu(x_fake.data)) * 255).clip(0, 255).astype(np.uint8)
+    else:
+        img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(12, 12))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
@@ -59,6 +61,7 @@ def main():
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
     parser.add_argument('--g_arch', type=int, default=1)
+    parser.add_argument('--g_activate', type=str, default='sigmoid')
     parser.add_argument('--g_channel', type=int, default=512)
     parser.add_argument('--d_arch', type=int, default=1)
     parser.add_argument('--d_iters', type=int, default=5)
@@ -96,13 +99,13 @@ def main():
         summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
     # load celebA
-    dataset = CelebA(image_type=args.g_arch)
+    dataset = CelebA(image_type=args.g_activate)
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
     if args.g_arch == 1:
-        gen = wgan.Generator(n_hidden=args.g_hidden, ch=args.g_channel)
+        gen = wgan.Generator(n_hidden=args.g_hidden, activate=args.g_activate, ch=args.g_channel)
     elif args.g_arch == 2:
-        gen = wgan.Generator2(n_hidden=args.g_hidden, ch=args.g_channel)
+        gen = wgan.Generator2(n_hidden=args.g_hidden, activate=args.g_activate, ch=args.g_channel)
     else:
         raise ValueError('invalid arch')
 
@@ -153,14 +156,17 @@ def main():
                 batch = train_iter.next()
                 x = chainer.Variable(gen.xp.asarray([b[0] for b in batch], 'float32'))
                 # attr = chainer.Variable(gen.xp.asarray([b[1] for b in batch], 'int32'))
-                z = chainer.Variable(gen.xp.asarray(gen.make_hidden(args.batch_size)))
-                # z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32))
 
+                # real
                 y_real = dis(x)
+
+                # fake
+                z = chainer.Variable(gen.xp.asarray(gen.make_hidden(args.batch_size)), volatile=True)
                 x_fake = gen(z)
-                x_fake.unchain_backward()
+                x_fake.volatile = False
                 y_fake = dis(x_fake)
 
+                # calc EMD
                 L_dis = - (y_real - y_fake)
                 dis.cleargrads()
                 L_dis.backward()
@@ -206,7 +212,7 @@ def main():
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.gen.model".format(epoch)), gen)
 
-        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'))
+        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'), image_type=args.image_type)
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ from PIL import Image
 
 
 class CelebA(chainer.dataset.DatasetMixin):
-    def __init__(self, dataset_home='/home/mil/fukuta/datasets/', image_size=64, image_type=1):
+    def __init__(self, dataset_home='/home/mil/fukuta/datasets/', image_size=64, image_type='sigmoid'):
         self.image_type = image_type
         self.name = 'celeba'
         self.n_imgs = 202599
@@ -48,9 +48,9 @@ class CelebA(chainer.dataset.DatasetMixin):
         image = image.astype(np.float32).transpose((2, 0, 1))
 
         # pre-process
-        if self.image_type == 1:
+        if self.image_type == 'tanh':
             image /= 127.5 - 1
-        elif self.image_type == 2:
+        elif self.image_type == 'sigmoid':
             image /= 255.
         else:
             raise ValueError('invalid image type')
