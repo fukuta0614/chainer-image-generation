@@ -8,16 +8,17 @@ from chainer import cuda
 from chainer import serializers
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models import wgan
+import wgan
 from dataset import CelebA
 
 try:
     import tensorflow as tf
+
     use_tensorboard = True
 except:
     print('tensorflow is not installed')
@@ -35,7 +36,6 @@ def progress_report(count, start_time, batchsize, emd):
 
 
 def visualize(gen, epoch, savedir, batch_size=64, image_type='sigmoid'):
-
     z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
     if image_type == 'sigmoid':
