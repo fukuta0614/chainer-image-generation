@@ -18,7 +18,6 @@ from dataset import CelebA
 
 try:
     import tensorflow as tf
-
     use_tensorboard = True
 except:
     print('tensorflow is not installed')
@@ -212,7 +211,7 @@ def main():
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.dis.model".format(epoch)), dis)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.gen.model".format(epoch)), gen)
 
-        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'), image_type=args.activate)
+        visualize(gen, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'), image_type=args.g_activate)
 
 
 if __name__ == '__main__':
