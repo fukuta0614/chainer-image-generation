@@ -1,5 +1,6 @@
 # Wasserstein GAN 
 
+- chainer implementation of [WGAN](https://arxiv.org/abs/1701.07875)
 
 ## Learning Curve
 
