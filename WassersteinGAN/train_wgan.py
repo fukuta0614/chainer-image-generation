@@ -73,7 +73,7 @@ def main():
     args, unknown = parser.parse_known_args()
 
     # log directory
-    out = datetime.datetime.now().strftime('%m%d')
+    out = datetime.datetime.now().strftime('%m%d%H%M')
     if args.out:
         out = out + '_' + args.out
     out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", out))
@@ -108,9 +108,9 @@ def main():
     else:
         raise ValueError('invalid arch')
 
-    if args.g_arch == 1:
+    if args.d_arch == 1:
         dis = wgan.Discriminator(ch=args.d_channel)
-    elif args.g_arch == 2:
+    elif args.d_arch == 2:
         dis = wgan.Discriminator2(ch=args.d_channel)
     else:
         raise ValueError('invalid arch')

@@ -13,8 +13,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models import wgan
+import vaewgan
 from dataset import CelebA
 
 try:
@@ -35,12 +34,13 @@ def progress_report(count, start_time, batchsize, emd):
     )
 
 
-def visualize(gen, epoch, savedir, batch_size=64):
-
+def visualize(gen, epoch, savedir, batch_size=64, image_type='sigmoid'):
     z = chainer.Variable(gen.xp.asarray(gen.make_hidden(batch_size)), volatile=True)
     x_fake = gen(z, train=False)
-    # img_gen = ((cuda.to_cpu(x_fake.data)) * 255).astype(np.uint8)
-    img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    if image_type == 'sigmoid':
+        img_gen = ((cuda.to_cpu(x_fake.data)) * 255).clip(0, 255).astype(np.uint8)
+    else:
+        img_gen = ((cuda.to_cpu(x_fake.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(12, 12))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
@@ -55,19 +55,25 @@ def visualize(gen, epoch, savedir, batch_size=64):
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU device ID')
-    parser.add_argument('--epoch', '-e', type=int, default=100, help='# of epoch')
+    parser.add_argument('--epoch', '-e', type=int, default=300, help='# of epoch')
     parser.add_argument('--batch_size', '-b', type=int, default=100,
                         help='learning minibatch size')
     parser.add_argument('--g_hidden', type=int, default=128)
+    parser.add_argument('--g_arch', type=int, default=1)
+    parser.add_argument('--g_activate', type=str, default='sigmoid')
+    parser.add_argument('--g_channel', type=int, default=512)
+    parser.add_argument('--d_arch', type=int, default=1)
     parser.add_argument('--d_iters', type=int, default=5)
-    parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--d_clip', type=float, default=0.01)
+    parser.add_argument('--d_channel', type=int, default=512)
+    parser.add_argument('--initial_iter', type=int, default=10)
+    parser.add_argument('--resume', default='')
     parser.add_argument('--out', default='')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
 
     # log directory
-    out = datetime.datetime.now().strftime('%m%d')
+    out = datetime.datetime.now().strftime('%m%d%H%M')
     if args.out:
         out = out + '_' + args.out
     out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", out))
@@ -86,7 +92,6 @@ def main():
         sess.run(tf.initialize_all_variables())
 
         summary_dir = os.path.join(out_dir, "summaries")
-
         loss_ = tf.placeholder(tf.float32)
         gen_loss_summary = tf.scalar_summary('gen_loss', loss_)
         dis_loss_summary = tf.scalar_summary('dis_loss', loss_)
@@ -95,12 +100,12 @@ def main():
         summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
     # load celebA
-    dataset = CelebA()
+    dataset = CelebA(image_type=args.g_activate)
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
-    gen = wgan.Generator(n_hidden=args.g_hidden)
-    dis = wgan.Discriminator()
-    enc = wgan.Encoder()
+    gen = vaewgan.Generator(n_hidden=args.g_hidden, activate=args.g_activate, ch=args.g_channel)
+    dis = vaewgan.Discriminator(ch=args.d_channel)
+    enc = vaewgan.Encoder(n_hidden=args.g_hidden)
 
     if args.gpu >= 0:
         cuda.get_device(args.gpu).use()
@@ -122,7 +127,6 @@ def main():
 
     # start training
     start = time.time()
-    train_count = 0
     gen_iterations = 0
     for epoch in range(args.epoch):
 
@@ -149,20 +153,22 @@ def main():
                 batch = train_iter.next()
                 x = chainer.Variable(gen.xp.asarray([b[0] for b in batch], 'float32'))
                 # attr = chainer.Variable(gen.xp.asarray([b[1] for b in batch], 'int32'))
-                z = chainer.Variable(gen.xp.asarray(gen.make_hidden(args.batch_size)))
-                # z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32))
 
                 # real image
                 y_real, _, _ = dis(x)
 
                 # fake image from random noize
+                z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32), volatile=True)
                 x_fake = gen(z)
+                x_fake.volatile = False
                 y_fake, _, _ = dis(x_fake)
 
                 # fake image from reconstruction
+                x.volatile = True
                 mu_z, ln_var_z = enc(x)
                 z_rec = F.gaussian(mu_z, ln_var_z)
                 x_rec = gen(z_rec)
+                x_rec.volatile = False
                 y_rec, _, _ = dis(x_rec)
 
                 L_dis = - (y_real - 0.5 * y_fake - 0.5 * y_rec)
@@ -182,7 +188,7 @@ def main():
             ###########################
             batch = train_iter.next()
             x = chainer.Variable(gen.xp.asarray([b[0] for b in batch], 'float32'))
-            z = chainer.Variable(gen.xp.asarray(gen.make_hidden(args.batch_size)))
+            z = chainer.Variable(gen.xp.random.normal(0, 1, (args.batchsize, args.n_hidden)).astype(np.float32))
 
             # real image
             y_real, l2_real, l3_real = dis(x)
@@ -223,7 +229,7 @@ def main():
             sum_L_enc.append(l_enc)
             sum_L_rec.append(l_rec)
 
-            progress_report(epoch * len(dataset) + i, start, args.batch_size, l_dis)
+            progress_report(epoch * len(dataset) // args.batch_size + i, start, args.batch_size, l_dis)
 
             if use_tensorboard:
                 summary = sess.run(gen_loss_summary, feed_dict={loss_: l_gen})
