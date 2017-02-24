@@ -95,7 +95,7 @@ class Generator2(chainer.Chain):
 
 
 class Discriminator(chainer.Chain):
-    def __init__(self, size=64, ch=512, wscale=0.005):
+    def __init__(self, size=64, ch=512, wscale=0.005, use_gamma=True):
         assert (size % 16 == 0)
         initial_size = size // 16
         w = chainer.initializers.Normal(wscale)
@@ -106,10 +106,10 @@ class Discriminator(chainer.Chain):
             c2_1=L.Convolution2D(ch // 2, ch // 1, 4, 2, 1, initialW=w),
             c3_0=L.Convolution2D(ch // 1, ch // 1, 4, 2, 1, initialW=w),
             l4=L.Linear(initial_size * initial_size * ch, 1, initialW=w),
-            bn0_1=L.BatchNormalization(ch // 4),
-            bn1_1=L.BatchNormalization(ch // 2),
-            bn2_1=L.BatchNormalization(ch // 1),
-            bn3_0=L.BatchNormalization(ch // 1),
+            bn0_1=L.BatchNormalization(ch // 4, use_gamma=use_gamma),
+            bn1_1=L.BatchNormalization(ch // 2, use_gamma=use_gamma),
+            bn2_1=L.BatchNormalization(ch // 1, use_gamma=use_gamma),
+            bn3_0=L.BatchNormalization(ch // 1, use_gamma=use_gamma),
         )
 
     def clip_weight(self, clip=0.01):

@@ -65,6 +65,7 @@ def main():
     parser.add_argument('--d_arch', type=int, default=1)
     parser.add_argument('--d_iters', type=int, default=5)
     parser.add_argument('--d_clip', type=float, default=0.01)
+    parser.add_argument('--d_use_gamma', action='store_true', default=False)
     parser.add_argument('--d_channel', type=int, default=512)
     parser.add_argument('--initial_iter', type=int, default=10)
     parser.add_argument('--resume', default='')
@@ -109,7 +110,7 @@ def main():
         raise ValueError('invalid arch')
 
     if args.d_arch == 1:
-        dis = wgan.Discriminator(ch=args.d_channel)
+        dis = wgan.Discriminator(ch=args.d_channel, use_gamma=args.d_use_gamma)
     elif args.d_arch == 2:
         dis = wgan.Discriminator2(ch=args.d_channel)
     else:
