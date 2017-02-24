@@ -59,7 +59,7 @@ class Generator(chainer.Chain):
 
 
 class Discriminator(chainer.Chain):
-    def __init__(self, size=64, ch=512, wscale=0.02):
+    def __init__(self, size=64, ch=512, wscale=0.005):
         assert (size % 16 == 0)
         initial_size = size // 16
         w = chainer.initializers.Normal(wscale)
@@ -90,6 +90,41 @@ class Discriminator(chainer.Chain):
         h = F.leaky_relu(add_noise(self.bn1_1(self.c1_1(h), test=not train), test=not train))
         h2 = F.leaky_relu(add_noise(self.bn2_1(self.c2_1(h), test=not train), test=not train))
         h3 = F.leaky_relu(add_noise(self.bn3_0(self.c3_0(h2), test=not train), test=not train))
+        h = self.l4(h3)
+        return F.sum(h) / h.size, h2, h3
+
+
+class Discriminator2(chainer.Chain):
+    def __init__(self, size=64, ch=512, wscale=0.005):
+        assert (size % 16 == 0)
+        initial_size = size // 16
+        w = chainer.initializers.Normal(wscale)
+        super(Discriminator2, self).__init__(
+            c0_0=L.Convolution2D(3, ch // 8, 3, 1, 1, initialW=w),
+            c0_1=L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w),
+            c1_1=L.Convolution2D(ch // 4, ch // 2, 4, 2, 1, initialW=w),
+            c2_1=L.Convolution2D(ch // 2, ch // 1, 4, 2, 1, initialW=w),
+            c3_0=L.Convolution2D(ch // 1, ch // 1, 4, 2, 1, initialW=w),
+            l4=L.Linear(initial_size * initial_size * ch, 1, initialW=w),
+            bn0_1=L.BatchNormalization(ch // 4),
+            bn1_1=L.BatchNormalization(ch // 2),
+            bn2_1=L.BatchNormalization(ch // 1),
+            bn3_0=L.BatchNormalization(ch // 1),
+        )
+
+    def clip_weight(self, clip=0.01):
+        for param in self.params():
+            with cuda.get_device(param.data):
+                xp = cuda.get_array_module(param.data)
+                param.data = xp.clip(param.data, -clip, clip)
+
+    # noinspection PyCallingNonCallable,PyUnresolvedReferences
+    def __call__(self, x, train=True):
+        h = F.leaky_relu(self.c0_0(x))
+        h = F.leaky_relu(self.bn0_1(self.c0_1(h), test=not train))
+        h = F.leaky_relu(self.bn1_1(self.c1_1(h), test=not train))
+        h2 = F.leaky_relu(self.bn2_1(self.c2_1(h), test=not train))
+        h3 = F.leaky_relu(self.bn3_0(self.c3_0(h2), test=not train))
         h = self.l4(h3)
         return F.sum(h) / h.size, h2, h3
 

@@ -95,7 +95,7 @@ class Generator2(chainer.Chain):
 
 
 class Discriminator(chainer.Chain):
-    def __init__(self, size=64, ch=512, wscale=0.02):
+    def __init__(self, size=64, ch=512, wscale=0.005):
         assert (size % 16 == 0)
         initial_size = size // 16
         w = chainer.initializers.Normal(wscale)
@@ -130,7 +130,7 @@ class Discriminator(chainer.Chain):
 
 
 class Discriminator2(chainer.Chain):
-    def __init__(self, size=64, ch=512, wscale=0.02):
+    def __init__(self, size=64, ch=512, wscale=0.005):
         assert (size % 16 == 0)
         initial_size = size // 16
         w = chainer.initializers.Normal(wscale)
@@ -166,7 +166,7 @@ class Discriminator2(chainer.Chain):
 
 
 class DiscriminatorPFN(chainer.Chain):
-    def __init__(self, bottom_width=8, ch=512, wscale=0.02):
+    def __init__(self, bottom_width=8, ch=512, wscale=0.005):
         w = chainer.initializers.Normal(wscale)
         super(DiscriminatorPFN, self).__init__(
             c0_0=L.Convolution2D(3, ch // 8, 3, 1, 1, initialW=w),

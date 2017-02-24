@@ -55,7 +55,7 @@ def visualize(gen, enc, train_iter, epoch, savedir, batch_size=64, image_type='s
     fig = plt.figure(figsize=(9, 9))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
     for m in range(32):
-        i = m / 8
+        i = m // 8
         j = m % 8
         ax = fig.add_subplot(8, 8, 16 * i + j + 1, xticks=[], yticks=[])
         ax.imshow(img_origin[m].transpose(1, 2, 0))
@@ -134,7 +134,12 @@ def main():
     train_iter = chainer.iterators.MultiprocessIterator(dataset, args.batch_size)
 
     gen = vaewgan.Generator(n_hidden=args.g_hidden, activate=args.g_activate, ch=args.g_channel)
-    dis = vaewgan.Discriminator(ch=args.d_channel)
+    if args.d_arch == 1:
+        dis = vaewgan.Discriminator(ch=args.d_channel)
+    elif args.d_arch == 2:
+        dis = vaewgan.Discriminator2(ch=args.d_channel)
+    else:
+        raise ValueError('invalid arch')
     enc = vaewgan.Encoder(n_hidden=args.g_hidden)
 
     if args.gpu >= 0:
