@@ -34,11 +34,11 @@ def progress_report(count, start_time, batchsize):
 
 def visualize(genA, genB, realA, realB, epoch, savedir):
     img_realA = ((realA + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeA = genA(chainer.Variable(genA.xp.asarray(realA, 'float32')))
+    x_fakeA = genB(chainer.Variable(genA.xp.asarray(realA, 'float32')), train=False)
     img_genA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     img_realB = ((realB + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeB = genB(chainer.Variable(genB.xp.asarray(realB, 'float32')))
+    x_fakeB = genA(chainer.Variable(genB.xp.asarray(realB, 'float32')), train=False)
     img_genB = ((cuda.to_cpu(x_fakeB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(15, 6))
@@ -63,11 +63,12 @@ def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('out')
     parser.add_argument('--gpu', '-g', type=int, default=0, help='GPU device ID')
-    parser.add_argument('--epoch', '-e', type=int, default=300, help='# of epoch')
-    parser.add_argument('--batch_size', '-b', type=int, default=1)
-    parser.add_argument('--memory_size', '-m', type=int, default=50)
+    parser.add_argument('--epoch', '-e', type=int, default=200, help='# of epoch')
+    parser.add_argument('--batch_size', '-b', type=int, default=10)
+    parser.add_argument('--memory_size', '-m', type=int, default=500)
     parser.add_argument('--real_label', type=float, default=0.9)
     parser.add_argument('--fake_label', type=float, default=0)
+    parser.add_argument('--block_num', type=int, default=6)
     parser.add_argument('--lambda_', type=float, default=10)
 
     # args = parser.parse_args()
@@ -94,8 +95,8 @@ def main():
     N = len(trainA)
 
     # genA convert B -> A, genB convert A -> B
-    genA = Generator()
-    genB = Generator()
+    genA = Generator(block_num=args.block_num)
+    genB = Generator(block_num=args.block_num)
     # disA discriminate realA and fakeA, disB discriminate realB and fakeB
     disA = Discriminator()
     disB = Discriminator()
@@ -107,10 +108,10 @@ def main():
         disA.to_gpu()
         disB.to_gpu()
 
-    optimizer_genA = chainer.optimizers.Adam(alpha=0.0001, beta1=0.5, beta2=0.9)
-    optimizer_genB = chainer.optimizers.Adam(alpha=0.0001, beta1=0.5, beta2=0.9)
-    optimizer_disA = chainer.optimizers.Adam(alpha=0.0001, beta1=0.5, beta2=0.9)
-    optimizer_disB = chainer.optimizers.Adam(alpha=0.0001, beta1=0.5, beta2=0.9)
+    optimizer_genA = chainer.optimizers.Adam(alpha=0.0002, beta1=0.5, beta2=0.9)
+    optimizer_genB = chainer.optimizers.Adam(alpha=0.0002, beta1=0.5, beta2=0.9)
+    optimizer_disA = chainer.optimizers.Adam(alpha=0.0002, beta1=0.5, beta2=0.9)
+    optimizer_disB = chainer.optimizers.Adam(alpha=0.0002, beta1=0.5, beta2=0.9)
 
     optimizer_genA.setup(genA)
     optimizer_genB.setup(genB)
@@ -128,11 +129,12 @@ def main():
     iterations = 0
     for epoch in range(args.epoch):
 
-        if epoch in [5, 10, 15]:
-            optimizer_genA.alpha *= 0.5
-            optimizer_genB.alpha *= 0.5
-            optimizer_disA.alpha *= 0.5
-            optimizer_disB.alpha *= 0.5
+        if epoch > 100:
+            decay_rate = 0.0002 / 100
+            optimizer_genA.alpha -= decay_rate
+            optimizer_genB.alpha -= decay_rate
+            optimizer_disA.alpha -= decay_rate
+            optimizer_disB.alpha -= decay_rate
 
         # train
         iter_num = N // args.batch_size
