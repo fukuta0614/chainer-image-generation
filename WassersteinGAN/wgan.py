@@ -113,7 +113,9 @@ class Discriminator(chainer.Chain):
         )
 
     def clip_weight(self, clip=0.01):
-        for param in self.params():
+        for name, param in self.namedparams():
+            # if 'gamma' in name:
+            #     clip = 1.0
             with cuda.get_device(param.data):
                 xp = cuda.get_array_module(param.data)
                 param.data = xp.clip(param.data, -clip, clip)
