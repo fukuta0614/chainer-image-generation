@@ -1,9 +1,16 @@
 # Cycle GAN (something wrong)
 
-- chainer implementation of [WGAN](https://arxiv.org/abs/1701.07875)
-
+- chainer implementation of [CycleGAN](https://arxiv.org/pdf/1703.10593)
 
 ## Generated Image
 
-![generated](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/generated_cyclegan.png)
+![generated](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/generated.png)
 
+## Learning Curve
+
+![loss_dis_A](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_dis_A.png)
+![loss_dis_B](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_dis_B.png)
+![loss_rec_A](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_rec_A.png)
+![loss_rec_B](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_rec_B.png)
+![loss_gen_A](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_gen_A.png)
+![loss_gen_B](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_gen_B.png)
