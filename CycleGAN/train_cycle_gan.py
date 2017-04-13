@@ -35,24 +35,32 @@ def progress_report(count, start_time, batchsize):
 def visualize(genA, genB, realA, realB, epoch, savedir):
     img_realA = ((realA + 1) * 127.5).clip(0, 255).astype(np.uint8)
     x_fakeB = genB(chainer.Variable(genB.xp.asarray(realA, 'float32')), train=False)
+    x_recA = genA(x_fakeB, train=False)
     img_fakeB = ((cuda.to_cpu(x_fakeB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    img_recA = ((cuda.to_cpu(x_recA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     img_realB = ((realB + 1) * 127.5).clip(0, 255).astype(np.uint8)
     x_fakeA = genA(chainer.Variable(genA.xp.asarray(realB, 'float32')), train=False)
+    x_recB = genA(x_fakeA, train=False)
     img_fakeA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    img_recB = ((cuda.to_cpu(x_recB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
-    fig = plt.figure(figsize=(15, 6))
+    fig = plt.figure(figsize=(15, 9))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
     for i in range(40):
-        ax = fig.add_subplot(4, 10, i + 1, xticks=[], yticks=[])
+        ax = fig.add_subplot(6, 10, i + 1, xticks=[], yticks=[])
         if i < 10:
             ax.imshow(img_realA[i].transpose(1, 2, 0))
         elif i < 20:
             ax.imshow(img_fakeB[i - 10].transpose(1, 2, 0))
         elif i < 30:
-            ax.imshow(img_realB[i - 20].transpose(1, 2, 0))
+            ax.imshow(img_recA[i - 20].transpose(1, 2, 0))
+        elif i < 40:
+            ax.imshow(img_realB[i - 30].transpose(1, 2, 0))
+        elif i < 50:
+            ax.imshow(img_fakeA[i - 40].transpose(1, 2, 0))
         else:
-            ax.imshow(img_fakeA[i - 30].transpose(1, 2, 0))
+            ax.imshow(img_recB[i - 50].transpose(1, 2, 0))
 
     plt.savefig('{}/samples_{:03d}'.format(savedir, epoch))
     # plt.show()
@@ -77,7 +85,6 @@ def random_augmentation(image, crop_size, resize_size):
         image = image[:, ::-1, :]
 
     # randomly choose resize size
-
     if resize_size != crop_size:
         cv2.resize(image, (resize_size, resize_size), interpolation=cv2.INTER_AREA)
 
@@ -120,8 +127,8 @@ def main():
     testA = ImageDataset('horse2zebra/testA')
     testB = ImageDataset('horse2zebra/testB')
 
-    train_iterA = chainer.iterators.MultiprocessIterator(trainA, args.batch_size)
-    train_iterB = chainer.iterators.MultiprocessIterator(trainB, args.batch_size)
+    train_iterA = chainer.iterators.MultiprocessIterator(trainA, args.batch_size, n_processes=args.batch_size)
+    train_iterB = chainer.iterators.MultiprocessIterator(trainB, args.batch_size, n_processes=args.batch_size)
     N = len(trainA)
 
     # genA convert B -> A, genB convert A -> B
@@ -183,8 +190,8 @@ def main():
 
             # load fake batch
             if iterations < args.memory_size:
-                fakeA = genA(realB, train=True)
-                fakeB = genB(realA, train=True)
+                fakeA = genA(realB)
+                fakeB = genB(realA)
                 fakeA.unchain_backward()
                 fakeB.unchain_backward()
             else:
@@ -203,21 +210,20 @@ def main():
             y_realA = disA(realA)
             y_fakeA = disA(fakeA)
             loss_disA = 0.5 * (F.sum((y_realA - args.real_label) ** 2) + F.sum((y_fakeA - args.fake_label) ** 2)) \
-                        / args.batch_size
+                        / np.prod(y_fakeA.shape)
 
             # dis B
             y_realB = disB(realB)
             y_fakeB = disB(fakeB)
             loss_disB = 0.5 * (F.sum((y_realB - args.real_label) ** 2) + F.sum((y_fakeB - args.fake_label) ** 2)) \
-                        / args.batch_size
+                        / np.prod(y_fakeB.shape)
 
             # update dis
             disA.cleargrads()
-            loss_disA.backward()
-            optimizer_disA.update()
-
             disB.cleargrads()
+            loss_disA.backward()
             loss_disB.backward()
+            optimizer_disA.update()
             optimizer_disB.update()
 
             ###########################
@@ -225,14 +231,14 @@ def main():
             ###########################
 
             # gan A
-            fakeA = genA(realB, train=True)
+            fakeA = genA(realB)
             y_fakeA = disA(fakeA)
-            loss_ganA = 0.5 * F.sum((y_fakeA - args.real_label) ** 2) / args.batch_size
+            loss_ganA = 0.5 * F.sum((y_fakeA - args.real_label) ** 2) / np.prod(y_fakeA.shape)
 
             # gan B
-            fakeB = genB(realA, train=True)
+            fakeB = genB(realA)
             y_fakeB = disB(fakeB)
-            loss_ganB = 0.5 * F.sum((y_fakeB - args.real_label) ** 2) / args.batch_size
+            loss_ganB = 0.5 * F.sum((y_fakeB - args.real_label) ** 2) / np.prod(y_fakeB.shape)
 
             # rec A
             recA = genA(fakeB)
@@ -242,15 +248,16 @@ def main():
             recB = genB(fakeA)
             loss_recB = F.mean_absolute_error(recB, realB)
 
-            loss_genA = loss_ganA + lambda_ * (loss_recA + loss_recB)
-            loss_genB = loss_ganB + lambda_ * (loss_recB + loss_recA)
+            # gen loss
+            loss_gen = loss_ganA + loss_ganB + lambda_ * (loss_recA + loss_recB)
+            # loss_genB = loss_ganB + lambda_ * (loss_recB + loss_recA)
 
+            # update gen
             genA.cleargrads()
-            loss_genA.backward()
-            optimizer_genA.update()
-
             genB.cleargrads()
-            loss_genB.backward()
+            loss_gen.backward()
+            # loss_genB.backward()
+            optimizer_genA.update()
             optimizer_genB.update()
 
             # logging
@@ -258,8 +265,8 @@ def main():
             logger.plot('loss dis B', float(loss_disB.data))
             logger.plot('loss rec A', float(loss_recA.data))
             logger.plot('loss rec B', float(loss_recB.data))
-            logger.plot('loss gen A', float(loss_genA.data))
-            logger.plot('loss gen B', float(loss_genB.data))
+            logger.plot('loss gen A', float(loss_gen.data))
+            # logger.plot('loss gen B', float(loss_genB.data))
             logger.tick()
 
             # save to replay buffer

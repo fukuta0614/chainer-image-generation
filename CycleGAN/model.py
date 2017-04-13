@@ -13,7 +13,6 @@ def add_noise(h, test, sigma=0.2):
     else:
         return h + sigma * xp.random.randn(*h.data.shape)
 
-
 # convolution-batchnormalization-(dropout)-relu
 class CBR(chainer.Chain):
     def __init__(self, ch0, ch1, bn=True, sample='down', activation=F.relu, dropout=False, noise=False):
@@ -118,7 +117,7 @@ class Discriminator(chainer.Chain):
         h = self.c2(h, train=train)
         h = self.c3(h, train=train)
         h = self.c4(h)
-        # h = F.average_pooling_2d(h, h.data.shape[2], 1, 0)
+        h = F.average_pooling_2d(h, h.data.shape[2], 1, 0)
         return h
 
 
