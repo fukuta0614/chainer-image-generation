@@ -7,8 +7,7 @@ from PIL import Image
 class ImageDataset(chainer.dataset.DatasetMixin):
     dataset_home = '/home/mil/fukuta/datasets/'
 
-    def __init__(self, name, image_size=64, preprocess=1):
-        self.image_size = image_size
+    def __init__(self, name, preprocess=1):
         self.preprocess = preprocess
         self.name = name
         self.data_dir = os.path.join(self.dataset_home, self.name)

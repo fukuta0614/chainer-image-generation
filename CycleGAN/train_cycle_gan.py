@@ -4,12 +4,12 @@ import numpy as np
 import datetime
 import time
 import pickle
-
+import random
 import chainer
 from chainer import cuda
 from chainer import serializers
 import chainer.functions as F
-
+import cv2
 import matplotlib
 
 matplotlib.use('Agg')
@@ -34,12 +34,12 @@ def progress_report(count, start_time, batchsize):
 
 def visualize(genA, genB, realA, realB, epoch, savedir):
     img_realA = ((realA + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeA = genB(chainer.Variable(genA.xp.asarray(realA, 'float32')), train=False)
-    img_genA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    x_fakeB = genB(chainer.Variable(genB.xp.asarray(realA, 'float32')), train=False)
+    img_fakeB = ((cuda.to_cpu(x_fakeB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     img_realB = ((realB + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeB = genA(chainer.Variable(genB.xp.asarray(realB, 'float32')), train=False)
-    img_genB = ((cuda.to_cpu(x_fakeB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
+    x_fakeA = genA(chainer.Variable(genA.xp.asarray(realB, 'float32')), train=False)
+    img_fakeA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(15, 6))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
@@ -48,15 +48,40 @@ def visualize(genA, genB, realA, realB, epoch, savedir):
         if i < 10:
             ax.imshow(img_realA[i].transpose(1, 2, 0))
         elif i < 20:
-            ax.imshow(img_genA[i - 10].transpose(1, 2, 0))
+            ax.imshow(img_fakeB[i - 10].transpose(1, 2, 0))
         elif i < 30:
             ax.imshow(img_realB[i - 20].transpose(1, 2, 0))
         else:
-            ax.imshow(img_genB[i - 30].transpose(1, 2, 0))
+            ax.imshow(img_fakeA[i - 30].transpose(1, 2, 0))
 
     plt.savefig('{}/samples_{:03d}'.format(savedir, epoch))
     # plt.show()
     plt.close()
+
+
+def random_augmentation(image, crop_size, resize_size):
+    # randomly choose crop size
+    image = image.transpose(1, 2, 0)
+    h, w, _ = image.shape
+
+    # random cropping
+    if crop_size != h:
+        top = random.randint(0, h - crop_size - 1)
+        left = random.randint(0, w - crop_size - 1)
+        bottom = top + crop_size
+        right = left + crop_size
+        image = image[top:bottom, left:right, :]
+
+    # random flipping
+    if random.randint(0, 1):
+        image = image[:, ::-1, :]
+
+    # randomly choose resize size
+
+    if resize_size != crop_size:
+        cv2.resize(image, (resize_size, resize_size), interpolation=cv2.INTER_AREA)
+
+    return image.transpose(2, 0, 1)
 
 
 def main():
@@ -69,6 +94,9 @@ def main():
     parser.add_argument('--real_label', type=float, default=0.9)
     parser.add_argument('--fake_label', type=float, default=0)
     parser.add_argument('--block_num', type=int, default=6)
+    parser.add_argument('--g_nobn', dest='g_bn', action='store_false', default=True)
+    parser.add_argument('--d_nobn', dest='d_bn', action='store_false', default=True)
+    parser.add_argument('--no_augment', dest='augmentation', action='store_false', default=True)
     parser.add_argument('--lambda_', type=float, default=10)
 
     # args = parser.parse_args()
@@ -87,19 +115,21 @@ def main():
             print('{} = {}'.format(k, v))
             f.write('{} = {}\n'.format(k, v))
 
-    datapath = ['horse2zebra/trainA', 'horse2zebra/trainB', 'horse2zebra/testA', 'horse2zebra/testB']
-    trainA, trainB, testA, testB = [ImageDataset(d) for d in datapath]
+    trainA = ImageDataset('horse2zebra/trainA')
+    trainB = ImageDataset('horse2zebra/trainB')
+    testA = ImageDataset('horse2zebra/testA')
+    testB = ImageDataset('horse2zebra/testB')
 
     train_iterA = chainer.iterators.MultiprocessIterator(trainA, args.batch_size)
     train_iterB = chainer.iterators.MultiprocessIterator(trainB, args.batch_size)
     N = len(trainA)
 
     # genA convert B -> A, genB convert A -> B
-    genA = Generator(block_num=args.block_num)
-    genB = Generator(block_num=args.block_num)
+    genA = Generator(block_num=args.block_num, bn=args.g_bn)
+    genB = Generator(block_num=args.block_num, bn=args.g_bn)
     # disA discriminate realA and fakeA, disB discriminate realB and fakeB
-    disA = Discriminator()
-    disB = Discriminator()
+    disA = Discriminator(bn=args.d_bn)
+    disB = Discriminator(bn=args.d_bn)
 
     if args.gpu >= 0:
         cuda.get_device_from_id(args.gpu).use()
@@ -139,16 +169,32 @@ def main():
         # train
         iter_num = N // args.batch_size
         for i in range(iter_num):
-            realA = chainer.Variable(genA.xp.asarray(train_iterA.next(), 'float32'))
-            realB = chainer.Variable(genA.xp.asarray(train_iterB.next(), 'float32'))
+
+            # load real batch
+            imagesA = train_iterA.next()
+            imagesB = train_iterB.next()
+            if args.augmentation:
+                crop_size = np.random.choice([160, 192, 224, 256])
+                resize_size = np.random.choice([160, 192, 224, 256])
+                imagesA = [random_augmentation(image, crop_size, resize_size) for image in imagesA]
+                imagesB = [random_augmentation(image, crop_size, resize_size) for image in imagesB]
+            realA = chainer.Variable(genA.xp.asarray(imagesA, 'float32'))
+            realB = chainer.Variable(genB.xp.asarray(imagesB, 'float32'))
+
+            # load fake batch
             if iterations < args.memory_size:
-                fakeA = genA(realB, train=False)
-                fakeB = genB(realA, train=False)
+                fakeA = genA(realB, train=True)
+                fakeB = genB(realA, train=True)
                 fakeA.unchain_backward()
                 fakeB.unchain_backward()
             else:
-                fakeA = chainer.Variable(genA.xp.asarray(fake_poolA[np.random.randint(args.memory_size, size=args.batch_size)]))
-                fakeB = chainer.Variable(genA.xp.asarray(fake_poolB[np.random.randint(args.memory_size, size=args.batch_size)]))
+                fake_imagesA = fake_poolA[np.random.randint(args.memory_size, size=args.batch_size)]
+                fake_imagesB = fake_poolB[np.random.randint(args.memory_size, size=args.batch_size)]
+                if args.augmentation:
+                    fake_imagesA = [random_augmentation(image, crop_size, resize_size) for image in fake_imagesA]
+                    fake_imagesB = [random_augmentation(image, crop_size, resize_size) for image in fake_imagesB]
+                fakeA = chainer.Variable(genA.xp.asarray(fake_imagesA))
+                fakeB = chainer.Variable(genA.xp.asarray(fake_imagesB))
 
             ############################
             # (1) Update D network
@@ -220,16 +266,23 @@ def main():
             fakeA = cuda.to_cpu(fakeA.data)
             fakeB = cuda.to_cpu(fakeB.data)
             for k in range(args.batch_size):
-                fake_poolA[(iterations * args.batch_size) % args.memory_size + k] = fakeA[k]
-                fake_poolB[(iterations * args.batch_size) % args.memory_size + k] = fakeB[k]
+                fake_sampleA = fakeA[k]
+                fake_sampleB = fakeB[k]
+                if args.augmentation:
+                    fake_sampleA = cv2.resize(fake_sampleA.transpose(1, 2, 0), (256, 256),
+                                              interpolation=cv2.INTER_AREA).transpose(2, 0, 1)
+                    fake_sampleB = cv2.resize(fake_sampleB.transpose(1, 2, 0), (256, 256),
+                                              interpolation=cv2.INTER_AREA).transpose(2, 0, 1)
+                fake_poolA[(iterations * args.batch_size) % args.memory_size + k] = fake_sampleA
+                fake_poolB[(iterations * args.batch_size) % args.memory_size + k] = fake_sampleB
 
             iterations += 1
             progress_report(iterations, start, args.batch_size)
 
-        logger.flush(out_dir)
-        visualize(genA, genB, const_realA, const_realB, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'))
-
         if epoch % 5 == 0:
+            logger.flush(out_dir)
+            visualize(genA, genB, const_realA, const_realB, epoch=epoch, savedir=os.path.join(out_dir, 'visualize'))
+
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.disA.model".format(epoch)), disA)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.disB.model".format(epoch)), disB)
             serializers.save_hdf5(os.path.join(out_dir, "models", "{:03d}.genA.model".format(epoch)), genA)
