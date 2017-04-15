@@ -104,7 +104,7 @@ class Discriminator(chainer.Chain):
         # Patch GAN
         layers = {}
         w = chainer.initializers.Normal(0.02)
-        layers['c0_0'] = CBR(3, 64, bn=False, sample='down', activation=F.leaky_relu, dropout=False)
+        layers['c0_0'] = CBR(3, 64, bn=False, sample='down', activation=F.leaky_relu, dropout=False, noise=True)
         layers['c1'] = CBR(64, 128, bn=bn, sample='down', activation=F.leaky_relu, dropout=False)
         layers['c2'] = CBR(128, 256, bn=bn, sample='down', activation=F.leaky_relu, dropout=False)
         layers['c3'] = CBR(256, 512, bn=bn, sample='down', activation=F.leaky_relu, dropout=False)
@@ -117,7 +117,7 @@ class Discriminator(chainer.Chain):
         h = self.c2(h, train=train)
         h = self.c3(h, train=train)
         h = self.c4(h)
-        h = F.average_pooling_2d(h, h.data.shape[2], 1, 0)
+        # h = F.average_pooling_2d(h, h.data.shape[2], 1, 0)
         return h
 
 

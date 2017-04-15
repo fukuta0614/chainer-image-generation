@@ -41,13 +41,13 @@ def visualize(genA, genB, realA, realB, epoch, savedir):
 
     img_realB = ((realB + 1) * 127.5).clip(0, 255).astype(np.uint8)
     x_fakeA = genA(chainer.Variable(genA.xp.asarray(realB, 'float32')), train=False)
-    x_recB = genA(x_fakeA, train=False)
+    x_recB = genB(x_fakeA, train=False)
     img_fakeA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
     img_recB = ((cuda.to_cpu(x_recB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     fig = plt.figure(figsize=(15, 9))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0.05, wspace=0.05)
-    for i in range(40):
+    for i in range(60):
         ax = fig.add_subplot(6, 10, i + 1, xticks=[], yticks=[])
         if i < 10:
             ax.imshow(img_realA[i].transpose(1, 2, 0))
@@ -99,11 +99,13 @@ def main():
     parser.add_argument('--batch_size', '-b', type=int, default=10)
     parser.add_argument('--memory_size', '-m', type=int, default=500)
     parser.add_argument('--real_label', type=float, default=0.9)
-    parser.add_argument('--fake_label', type=float, default=0)
+    parser.add_argument('--fake_label', type=float, default=0.0)
     parser.add_argument('--block_num', type=int, default=6)
     parser.add_argument('--g_nobn', dest='g_bn', action='store_false', default=True)
     parser.add_argument('--d_nobn', dest='d_bn', action='store_false', default=True)
-    parser.add_argument('--no_augment', dest='augmentation', action='store_false', default=True)
+    parser.add_argument('--variable_size', action='store_true', default=False)
+    parser.add_argument('--lambda_dis_real', type=float, default=0)
+    parser.add_argument('--size', type=int, default=128)
     parser.add_argument('--lambda_', type=float, default=10)
 
     # args = parser.parse_args()
@@ -122,13 +124,13 @@ def main():
             print('{} = {}'.format(k, v))
             f.write('{} = {}\n'.format(k, v))
 
-    trainA = ImageDataset('horse2zebra/trainA')
-    trainB = ImageDataset('horse2zebra/trainB')
-    testA = ImageDataset('horse2zebra/testA')
-    testB = ImageDataset('horse2zebra/testB')
+    trainA = ImageDataset('horse2zebra/trainA', augmentation=True, image_size=256, final_size=args.size)
+    trainB = ImageDataset('horse2zebra/trainB', augmentation=True, image_size=256, final_size=args.size)
+    testA = ImageDataset('horse2zebra/testA', image_size=256, final_size=args.size)
+    testB = ImageDataset('horse2zebra/testB', image_size=256, final_size=args.size)
 
-    train_iterA = chainer.iterators.MultiprocessIterator(trainA, args.batch_size, n_processes=args.batch_size)
-    train_iterB = chainer.iterators.MultiprocessIterator(trainB, args.batch_size, n_processes=args.batch_size)
+    train_iterA = chainer.iterators.MultiprocessIterator(trainA, args.batch_size, n_processes=min(8, args.batch_size))
+    train_iterB = chainer.iterators.MultiprocessIterator(trainB, args.batch_size, n_processes=min(8, args.batch_size))
     N = len(trainA)
 
     # genA convert B -> A, genB convert A -> B
@@ -157,8 +159,8 @@ def main():
 
     # start training
     start = time.time()
-    fake_poolA = np.zeros((args.memory_size, 3, 256, 256)).astype('float32')
-    fake_poolB = np.zeros((args.memory_size, 3, 256, 256)).astype('float32')
+    fake_poolA = np.zeros((args.memory_size, 3, args.size, args.size)).astype('float32')
+    fake_poolB = np.zeros((args.memory_size, 3, args.size, args.size)).astype('float32')
     lambda_ = args.lambda_
     const_realA = np.asarray([testA.get_example(i) for i in range(10)])
     const_realB = np.asarray([testB.get_example(i) for i in range(10)])
@@ -180,7 +182,7 @@ def main():
             # load real batch
             imagesA = train_iterA.next()
             imagesB = train_iterB.next()
-            if args.augmentation:
+            if args.variable_size:
                 crop_size = np.random.choice([160, 192, 224, 256])
                 resize_size = np.random.choice([160, 192, 224, 256])
                 imagesA = [random_augmentation(image, crop_size, resize_size) for image in imagesA]
@@ -197,7 +199,7 @@ def main():
             else:
                 fake_imagesA = fake_poolA[np.random.randint(args.memory_size, size=args.batch_size)]
                 fake_imagesB = fake_poolB[np.random.randint(args.memory_size, size=args.batch_size)]
-                if args.augmentation:
+                if args.variable_size:
                     fake_imagesA = [random_augmentation(image, crop_size, resize_size) for image in fake_imagesA]
                     fake_imagesB = [random_augmentation(image, crop_size, resize_size) for image in fake_imagesB]
                 fakeA = chainer.Variable(genA.xp.asarray(fake_imagesA))
@@ -209,14 +211,21 @@ def main():
             # dis A
             y_realA = disA(realA)
             y_fakeA = disA(fakeA)
-            loss_disA = 0.5 * (F.sum((y_realA - args.real_label) ** 2) + F.sum((y_fakeA - args.fake_label) ** 2)) \
+            loss_disA = (F.sum((y_realA - args.real_label) ** 2) + F.sum((y_fakeA - args.fake_label) ** 2)) \
                         / np.prod(y_fakeA.shape)
 
             # dis B
             y_realB = disB(realB)
             y_fakeB = disB(fakeB)
-            loss_disB = 0.5 * (F.sum((y_realB - args.real_label) ** 2) + F.sum((y_fakeB - args.fake_label) ** 2)) \
+            loss_disB = (F.sum((y_realB - args.real_label) ** 2) + F.sum((y_fakeB - args.fake_label) ** 2)) \
                         / np.prod(y_fakeB.shape)
+
+            # discriminate real A and real B not only realA and fakeA
+            if args.lambda_dis_real > 0:
+                y_realB = disA(realB)
+                loss_disA += F.sum((y_realB - args.fake_label) ** 2) / np.prod(y_realB.shape)
+                y_realA = disB(realA)
+                loss_disB += F.sum((y_realA - args.fake_label) ** 2) / np.prod(y_realA.shape)
 
             # update dis
             disA.cleargrads()
@@ -233,12 +242,12 @@ def main():
             # gan A
             fakeA = genA(realB)
             y_fakeA = disA(fakeA)
-            loss_ganA = 0.5 * F.sum((y_fakeA - args.real_label) ** 2) / np.prod(y_fakeA.shape)
+            loss_ganA = F.sum((y_fakeA - args.real_label) ** 2) / np.prod(y_fakeA.shape)
 
             # gan B
             fakeB = genB(realA)
             y_fakeB = disB(fakeB)
-            loss_ganB = 0.5 * F.sum((y_fakeB - args.real_label) ** 2) / np.prod(y_fakeB.shape)
+            loss_ganB = F.sum((y_fakeB - args.real_label) ** 2) / np.prod(y_fakeB.shape)
 
             # rec A
             recA = genA(fakeB)
@@ -275,7 +284,7 @@ def main():
             for k in range(args.batch_size):
                 fake_sampleA = fakeA[k]
                 fake_sampleB = fakeB[k]
-                if args.augmentation:
+                if args.variable_size:
                     fake_sampleA = cv2.resize(fake_sampleA.transpose(1, 2, 0), (256, 256),
                                               interpolation=cv2.INTER_AREA).transpose(2, 0, 1)
                     fake_sampleB = cv2.resize(fake_sampleB.transpose(1, 2, 0), (256, 256),

@@ -13,4 +13,3 @@
 ![loss_rec_A](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_rec_A.jpg)
 ![loss_rec_B](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_rec_B.jpg)
 ![loss_gen_A](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_gen_A.jpg)
-![loss_gen_B](https://raw.githubusercontent.com/fukuta0614/chainer-image-generation/master/image/cyclegan/loss_gen_B.jpg)
