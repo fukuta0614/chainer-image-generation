@@ -34,13 +34,13 @@ def progress_report(count, start_time, batchsize):
 
 def visualize(genA, genB, realA, realB, epoch, savedir):
     img_realA = ((realA + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeB = genB(chainer.Variable(genB.xp.asarray(realA, 'float32')), train=False)
+    x_fakeB = genB(chainer.Variable(genB.xp.asarray(realA, 'float32'), volatile=True), train=False)
     x_recA = genA(x_fakeB, train=False)
     img_fakeB = ((cuda.to_cpu(x_fakeB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
     img_recA = ((cuda.to_cpu(x_recA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
     img_realB = ((realB + 1) * 127.5).clip(0, 255).astype(np.uint8)
-    x_fakeA = genA(chainer.Variable(genA.xp.asarray(realB, 'float32')), train=False)
+    x_fakeA = genA(chainer.Variable(genA.xp.asarray(realB, 'float32'), volatile=True), train=False)
     x_recB = genB(x_fakeA, train=False)
     img_fakeA = ((cuda.to_cpu(x_fakeA.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)
     img_recB = ((cuda.to_cpu(x_recB.data) + 1) * 127.5).clip(0, 255).astype(np.uint8)

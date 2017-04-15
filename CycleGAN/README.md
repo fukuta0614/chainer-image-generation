@@ -1,4 +1,4 @@
-# Cycle GAN (something wrong)
+# Cycle GAN (under construction)
 
 - chainer implementation of [CycleGAN](https://arxiv.org/pdf/1703.10593)
 
